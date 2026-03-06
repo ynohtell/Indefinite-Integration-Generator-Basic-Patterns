@@ -11,12 +11,13 @@ class ApplicationUI:
             st.session_state.history = []
         if "expr_input" not in st.session_state:
             st.session_state.expr_input = ""
+        if "last_result" not in st.session_state:
+            st.session_state.last_result = None
 
     def _append_to_input(self, val: str):
         st.session_state.expr_input += val
 
     def render_virtual_keyboard(self):
-        """Renders a clean math keyboard."""
         keys = [
             [("x²", "**2"), ("x³", "**3"), ("xⁿ", "**"), ("√", "sqrt(")],
             [("sin", "sin("), ("cos", "cos("), ("tan", "tan("), ("eˣ", "exp(")],
@@ -35,23 +36,20 @@ class ApplicationUI:
                         st.button(label, on_click=self._append_to_input, args=(val,), use_container_width=True, key=f"btn_{label}")
 
     def render_trail(self, res: ComputationResult):
+        st.markdown("### ✨ Final Answer")
+        st.success(f"$$ \\int f(x)dx = {res.final_answer} $$")
+        
         st.divider()
         
-        # 1. Given & Method (Clean top section)
-        st.markdown("### Solution")
+        st.markdown("#### Problem Breakdown")
         st.info(f"$$ {res.given} $$")
         st.caption(f"**Method Used:** {res.method}")
         
-        # 2. Final Answer (Prominently displayed)
-        st.success(f"$$ \\int f(x)dx = {res.final_answer} $$")
-        
-        # 3. Steps (Tucked inside an expander for a clean look)
         with st.expander("View Step-by-Step Breakdown", expanded=False):
             for i, step in enumerate(res.steps, 1):
                 st.markdown(f"**Step {i}:**")
                 st.latex(step)
                 
-        # 4. Verification
         with st.expander("View Verification (Derivative Check)", expanded=False):
             parts = res.verification.split("\n\n")
             if len(parts) >= 2:
@@ -63,49 +61,112 @@ class ApplicationUI:
             else:
                 st.warning(res.verification)
                 
-        # 5. Summary (Using native metrics)
-        st.markdown("<br>", unsafe_allow_html=True)
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Runtime", res.summary.get("Runtime", "N/A"))
-        col2.metric("Iterations", res.summary.get("Iterations", "N/A"))
-        col3.metric("Computed At", res.summary.get("Timestamp", "N/A").split(" ")[1])
+        # Subdued metrics at the bottom
+        runtime = res.summary.get("Runtime", "N/A")
+        iterations = res.summary.get("Iterations", "N/A")
+        time_computed = res.summary.get("Timestamp", " N/A").split(" ")[1]
+        
+        st.markdown(
+            f"<p style='text-align: right; font-size: 0.8rem; color: #888; margin-top: 1rem;'>"
+            f"⏱ {runtime} &nbsp;|&nbsp; 🔄 {iterations} iter &nbsp;|&nbsp; 🕒 {time_computed}</p>", 
+            unsafe_allow_html=True
+        )
 
     def run(self):
-        st.set_page_config(page_title="Symbolic Integrator", layout="centered", page_icon="∫")
+        st.set_page_config(page_title="Symbolic Integrator", layout="wide", page_icon="∫")
         
-        # Header
-        st.title("∫ Indefinite Integration")
-        st.markdown("Enter a mathematical expression to compute its indefinite integral.")
-        
-        # Input Section
-        st.text_input("Integrand f(x)", key="expr_input", placeholder="e.g., 3*x**2 or sin(x)")
-        
-        # Keyboard Expander
-        with st.expander("⌨️ Virtual Math Keyboard"):
-            self.render_virtual_keyboard()
+        # --- UI REFINEMENT: CUSTOM CSS ---
+        st.markdown("""
+        <style>
+            /* 1. Remove top padding and lock global scroll */
+            .main .block-container {
+                padding-top: 2rem !important; 
+                padding-bottom: 0rem !important;
+                max-height: 100vh;
+            }
+            html, body, [data-testid="stAppViewContainer"] {
+                overflow: hidden !important;
+            }
             
-        submit_button = st.button("Compute Integral", type="primary", use_container_width=True)
+            /* 2. Create the vertical separator and handle independent scrolling */
+            div[data-testid="column"]:nth-of-type(1) {
+                border-right: 1px solid rgba(128, 128, 128, 0.3); 
+                padding-right: 2rem;
+                height: 90vh;
+            }
+            div[data-testid="column"]:nth-of-type(2) {
+                padding-left: 2rem;
+                height: 90vh; 
+                overflow-y: auto; /* Independent scrollbar for results */
+                padding-right: 1rem; 
+            }
+            
+            /* 3. Refine typography spacing to close the gaps */
+            h1 {
+                margin-top: -20px !important;
+                padding-bottom: 0px !important;
+                margin-bottom: 0px !important;
+            }
+            div[data-testid="stCaptionContainer"] {
+                margin-bottom: 1rem;
+            }
+            
+            /* Hide Streamlit header/footer for cleaner app feel */
+            header {visibility: hidden;}
+            footer {visibility: hidden;}
+        </style>
+        """, unsafe_allow_html=True)
+        # ---------------------------------
+        
+        col_left, col_right = st.columns([1, 1.3], gap="small")
+        
+        with col_left:
+            st.markdown("<h1>∫ Indefinite Integration</h1>", unsafe_allow_html=True)
+            st.caption("Enter a mathematical expression to compute its indefinite integral.")
+            
+            st.text_input("Integrand f(x)", key="expr_input", placeholder="e.g., 3*x**2 or sin(x)")
+            
+            with st.expander("⌨️ Virtual Math Keyboard", expanded=True):
+                self.render_virtual_keyboard()
+                
+            submit_button = st.button("Compute Integral", type="primary", use_container_width=True)
 
-        # Computation Logic
-        if submit_button:
-            if not st.session_state.expr_input.strip():
-                st.error("Please enter an integrand.")
-                return
-                
-            with st.spinner("Integrating..."):
-                current_input = st.session_state.expr_input.strip()
-                result = self.engine.compute(current_input)
-                
-                if result.is_success:
-                    self.render_trail(result)
-                    
-                    if not st.session_state.history or st.session_state.history[-1]["input"] != current_input:
-                        st.session_state.history.append({
-                            "input": current_input,
-                            "result": result
-                        })
+            if submit_button:
+                if not st.session_state.expr_input.strip():
+                    st.error("Please enter an integrand.")
                 else:
-                    st.error(f"Computation Failed: {result.error_message}")
+                    with st.spinner("Integrating..."):
+                        current_input = st.session_state.expr_input.strip()
+                        result = self.engine.compute(current_input)
+                        
+                        st.session_state.last_result = result
+                        
+                        if result.is_success:
+                            if not st.session_state.history or st.session_state.history[-1]["input"] != current_input:
+                                st.session_state.history.append({
+                                    "input": current_input,
+                                    "result": result
+                                })
+
+        with col_right:
+            if st.session_state.last_result:
+                if st.session_state.last_result.is_success:
+                    self.render_trail(st.session_state.last_result)
+                else:
+                    st.error(f"Computation Failed: {st.session_state.last_result.error_message}")
+            else:
+                st.info("Enter an expression on the left and click **Compute Integral** to see the solution here.")
+                
+                # Credits pushed down using margin instead of <br> tags
+                st.markdown(
+                    """
+                    <div style='text-align: center; color: rgba(128,128,128,0.5); margin-top: 40vh;'>
+                        <h4 style='margin-bottom: 0;'>MADE BY UNDISPUTEDS</h4>
+                        <p style='font-size: 0.9rem;'>Aaron Mayor &nbsp;|&nbsp; Henry Pula &nbsp;|&nbsp; Johnbert Malinis</p>
+                    </div>
+                    """, 
+                    unsafe_allow_html=True
+                )
 
 if __name__ == "__main__":
     app = ApplicationUI()
