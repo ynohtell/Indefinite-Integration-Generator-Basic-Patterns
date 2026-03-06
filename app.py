@@ -139,7 +139,7 @@ class ApplicationUI:
                 margin-bottom: 0px !important;
             }
             div[data-testid="stExpanderDetails"] {
-                padding-bottom: 0px !important; 
+                padding-bottom: 20px !important; 
             }
             
             footer {visibility: hidden;}
