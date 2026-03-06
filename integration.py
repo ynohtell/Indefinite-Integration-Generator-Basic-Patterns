@@ -1,15 +1,13 @@
-## Symbolic: Indefinite Integration Generator (Basic Patterns)
-
 import sympy as sp
 import time
 from datetime import datetime
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, List
 
 class ComputationResult:
     def __init__(self):
         self.given: str = ""
         self.method: str = ""
-        self.steps: list[str] = []
+        self.steps: List[str] = []
         self.final_answer: str = ""
         self.verification: str = ""
         self.summary: Dict[str, Any] = {}
