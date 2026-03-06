@@ -14,26 +14,58 @@ class ApplicationUI:
         if "last_result" not in st.session_state:
             st.session_state.last_result = None
 
-    def _append_to_input(self, val: str):
-        st.session_state.expr_input += val
+    def _handle_keypress(self, label: str, val: str):
+        if label == "C":
+            st.session_state.expr_input = ""
+        elif label == "⌫":
+            st.session_state.expr_input = st.session_state.expr_input[:-1]
+        else:
+            st.session_state.expr_input += val
+
+    def render_live_preview(self):
+        raw = st.session_state.expr_input
+        if raw:
+            # Swap python syntax for math syntax purely for visual preview
+            pretty = raw.replace("**", "^").replace("*", "·").replace("/", "÷")
+            st.markdown(
+                f"**Live Preview:** &nbsp; <span style='color: #4CAF50; font-family: monospace; font-size: 1.1rem;'>{pretty}</span>", 
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown("**Live Preview:** &nbsp; *Type an expression...*")
 
     def render_virtual_keyboard(self):
+        # Using Full-width '＋' so Streamlit doesn't render it as a markdown bullet point
         keys = [
-            [("x²", "**2"), ("x³", "**3"), ("xⁿ", "**"), ("√", "sqrt(")],
-            [("sin", "sin("), ("cos", "cos("), ("tan", "tan("), ("eˣ", "exp(")],
-            [("π", "pi"), ("+", " + "), ("-", " - "), ("*", " * ")],
-            [("/", " / "), ("(", "("), (")", ")"), ("Clear", "CLEAR")]
+            [("7", "7"), ("8", "8"), ("9", "9"), ("⌫", "BACKSPACE"), ("C", "CLEAR")],
+            [("4", "4"), ("5", "5"), ("6", "6"), ("×", "*"), ("÷", "/")],
+            [("1", "1"), ("2", "2"), ("3", "3"), ("＋", "+"), ("−", "-")],
+            [("0", "0"), (".", "."), ("x", "x"), ("(", "("), (")", ")")],
+            [("x²", "**2"), ("xⁿ", "**"), ("√", "sqrt("), ("sin", "sin("), ("cos", "cos(")]
         ]
         
-        for row in keys:
-            cols = st.columns(4)
-            for i, (label, val) in enumerate(row):
-                with cols[i]:
-                    if label == "Clear":
-                        if st.button(label, use_container_width=True, key=f"btn_{label}"):
-                            st.session_state.expr_input = ""
-                    else:
-                        st.button(label, on_click=self._append_to_input, args=(val,), use_container_width=True, key=f"btn_{label}")
+        # Squeezed the button height slightly to ensure it fits without scrolling
+        st.markdown("""
+        <style>
+            div[data-testid='stButton'] button {
+                height: 2.0rem;
+                min-height: 2.0rem;
+                padding: 0.1rem;
+            }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        for r_idx, row in enumerate(keys):
+            cols = st.columns(5)
+            for c_idx, (label, val) in enumerate(row):
+                with cols[c_idx]:
+                    st.button(
+                        label, 
+                        on_click=self._handle_keypress, 
+                        args=(label, val), 
+                        use_container_width=True, 
+                        key=f"btn_{r_idx}_{c_idx}"
+                    )
 
     def render_trail(self, res: ComputationResult):
         st.markdown("### ✨ Final Answer")
@@ -61,7 +93,6 @@ class ApplicationUI:
             else:
                 st.warning(res.verification)
                 
-        # Subdued metrics at the bottom
         runtime = res.summary.get("Runtime", "N/A")
         iterations = res.summary.get("Iterations", "N/A")
         time_computed = res.summary.get("Timestamp", " N/A").split(" ")[1]
@@ -78,9 +109,9 @@ class ApplicationUI:
         # --- UI REFINEMENT: CUSTOM CSS ---
         st.markdown("""
         <style>
-            /* 1. Remove top padding and lock global scroll */
+            [data-testid="stHeader"] { display: none !important; }
             .main .block-container {
-                padding-top: 2rem !important; 
+                padding-top: 1rem !important; 
                 padding-bottom: 0rem !important;
                 max-height: 100vh;
             }
@@ -88,47 +119,51 @@ class ApplicationUI:
                 overflow: hidden !important;
             }
             
-            /* 2. Create the vertical separator and handle independent scrolling */
-            div[data-testid="column"]:nth-of-type(1) {
-                border-right: 1px solid rgba(128, 128, 128, 0.3); 
-                padding-right: 2rem;
-                height: 90vh;
+            /* STRICT VERTICAL SEPARATOR */
+            [data-testid="stHorizontalBlock"] > [data-testid="column"]:nth-of-type(1) {
+                border-right: 2px solid rgba(128, 128, 128, 0.4) !important; 
+                padding-right: 2rem !important;
+                height: 95vh;
             }
-            div[data-testid="column"]:nth-of-type(2) {
-                padding-left: 2rem;
-                height: 90vh; 
-                overflow-y: auto; /* Independent scrollbar for results */
+            [data-testid="stHorizontalBlock"] > [data-testid="column"]:nth-of-type(2) {
+                padding-left: 1.5rem !important;
+                height: 95vh; 
+                overflow-y: auto; 
                 padding-right: 1rem; 
             }
             
-            /* 3. Refine typography spacing to close the gaps */
+            /* Remove margins to fit everything on one screen */
             h1 {
-                margin-top: -20px !important;
+                margin-top: -15px !important;
                 padding-bottom: 0px !important;
                 margin-bottom: 0px !important;
             }
-            div[data-testid="stCaptionContainer"] {
-                margin-bottom: 1rem;
+            div[data-testid="stExpanderDetails"] {
+                padding-bottom: 0px !important; 
             }
             
-            /* Hide Streamlit header/footer for cleaner app feel */
-            header {visibility: hidden;}
             footer {visibility: hidden;}
         </style>
         """, unsafe_allow_html=True)
         # ---------------------------------
         
-        col_left, col_right = st.columns([1, 1.3], gap="small")
+        col_left, col_right = st.columns([1, 1.3], gap="large")
         
         with col_left:
             st.markdown("<h1>∫ Indefinite Integration</h1>", unsafe_allow_html=True)
             st.caption("Enter a mathematical expression to compute its indefinite integral.")
             
-            st.text_input("Integrand f(x)", key="expr_input", placeholder="e.g., 3*x**2 or sin(x)")
+            # 1. Live Preview
+            self.render_live_preview()
             
-            with st.expander("⌨️ Virtual Math Keyboard", expanded=True):
+            # 2. Input Text
+            st.text_input("Integrand f(x)", key="expr_input", placeholder="e.g., 3*x**2 or sin(x)", label_visibility="collapsed")
+            
+            # 3. Quick Hand Calculator
+            with st.expander("🖩 Quick Hand Calculator", expanded=True):
                 self.render_virtual_keyboard()
                 
+            # Removed the extra <br> here so the button hugs the calculator and doesn't require scrolling
             submit_button = st.button("Compute Integral", type="primary", use_container_width=True)
 
             if submit_button:
@@ -157,11 +192,11 @@ class ApplicationUI:
             else:
                 st.info("Enter an expression on the left and click **Compute Integral** to see the solution here.")
                 
-                # Credits pushed down using margin instead of <br> tags
+                # Replaced margin-top with Flexbox to perfectly center the credits block vertically and horizontally
                 st.markdown(
                     """
-                    <div style='text-align: center; color: rgba(128,128,128,0.5); margin-top: 40vh;'>
-                        <h4 style='margin-bottom: 0;'>MADE BY UNDISPUTEDS</h4>
+                    <div style='display: flex; flex-direction: column; justify-content: center; align-items: center; height: 70vh; color: rgba(128,128,128,0.5);'>
+                        <h4 style='margin-bottom: 0; color: rgba(128,128,128,0.5);'>MADE BY UNDISPUTEDS</h4>
                         <p style='font-size: 0.9rem;'>Aaron Mayor &nbsp;|&nbsp; Henry Pula &nbsp;|&nbsp; Johnbert Malinis</p>
                     </div>
                     """, 
