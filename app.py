@@ -1,5 +1,5 @@
 import streamlit as st
-from engine import IntegrationEngine, ComputationResult
+from integration import IntegrationEngine, ComputationResult
 
 class ApplicationUI:
     def __init__(self):

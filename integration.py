@@ -1,3 +1,5 @@
+## Symbolic: Indefinite Integration Generator (Basic Patterns)
+
 import sympy as sp
 import time
 from datetime import datetime
@@ -42,15 +44,16 @@ class IntegrationEngine:
             if du_expr == 0: 
                 continue
             
-            ratio = sp.simplify(expr / du_expr)
+            # Divide the original expression by the derivative of u
+            integrand_with_dx_divided = sp.simplify(expr / du_expr)
             
-            if not ratio.has(self.x):
-                constant_multiplier = ratio
-                u_integrand = sp.simplify(expr.subs(u_expr, self.u) / du_expr)
+            # Substitute u for the u_expr in the remaining expression
+            u_integrand = sp.simplify(integrand_with_dx_divided.subs(u_expr, self.u))
+            
+            # If all x terms are successfully eliminated, the substitution is mathematically valid
+            if not u_integrand.has(self.x):
+                return u_expr, du_expr, u_integrand
                 
-                if not u_integrand.has(self.x):
-                    return u_expr, du_expr, u_integrand
-                    
         return None
 
     def compute(self, integrand_str: str) -> ComputationResult:
