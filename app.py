@@ -25,6 +25,11 @@ class ApplicationUI:
             st.session_state.expr_input += val
 
     def generate_html_report(self, res: ComputationResult) -> str:
+        # Prevent MathJax from overlapping text by splitting the LaTeX from the Markdown
+        parts = res.verification.split("\n\n")
+        math_check = parts[0]
+        status_check = parts[1].replace("**", "") if len(parts) > 1 else ""
+
         html = f"""
         <!DOCTYPE html>
         <html>
@@ -62,7 +67,8 @@ class ApplicationUI:
                 
                 <h3>[4] Verification & Auditing</h3>
                 <p><strong>Status:</strong> {res.stopping_reason}</p>
-                <p><strong>Check:</strong> $$ {res.verification} $$</p>
+                <p><strong>Derivative Back-Check:</strong> $$ {math_check} $$</p>
+                <p><strong>Result:</strong> {status_check}</p>
                 
                 <hr>
                 <p style="text-align:center; color: #7f8c8d; font-size: 0.9em;">
@@ -113,7 +119,7 @@ class ApplicationUI:
             st.session_state.selected_method = st.selectbox(
                 "Preferred Integration Method",
                 options=["Auto", "Basic Standard Patterns", "U-Substitution", "Partial Fractions"],
-                help="Select 'Auto' to let the engine decide, or force a specific method."
+                help="Select 'Auto' to let the engine decide, or force a specific method. Invalid forces will throw an error."
             )
             
             st.divider()
@@ -166,13 +172,6 @@ class ApplicationUI:
                             st.session_state.history.append({"input": current_input, "result": result})
 
         with col_right:
-            # INSTANT GRAPHING LOGIC: Always attempt to draw the graph based on the CURRENT text input first.
-            current_input = st.session_state.expr_input.strip()
-            if current_input:
-                fig = generate_plot_cached(current_input)
-                if fig:
-                    st.plotly_chart(fig, use_container_width=True)
-
             if st.session_state.last_result:
                 res = st.session_state.last_result
                 if res.is_success:
@@ -203,7 +202,6 @@ class ApplicationUI:
                             
                     st.caption(f"⏱ {res.summary.get('Runtime', 'N/A')} | 🕒 {res.summary.get('Timestamp', 'N/A')}")
                     
-                    # HTML Export Feature Button (Keeps formatting pristine)
                     report_html = self.generate_html_report(res)
                     filename = f"integration_report_{res.summary.get('Timestamp', 'report').replace(':', '').replace(' ', '_')}.html"
                     st.download_button(label="📄 Export Report (HTML - Best Format)", data=report_html, file_name=filename, mime="text/html", use_container_width=True)
@@ -212,8 +210,16 @@ class ApplicationUI:
                     st.error(f"Computation Failed")
                     st.warning(res.error_message)
                     st.info(f"System Note: {res.stopping_reason}")
-            elif not current_input:
+            elif not st.session_state.expr_input.strip():
                 st.info("👈 Enter an expression on the left and click **Compute Integral** to see the solution here.")
+
+            # INSTANT GRAPHING LOGIC: Moved to the BOTTOM of the right column
+            current_input = st.session_state.expr_input.strip()
+            if current_input:
+                st.divider()
+                fig = generate_plot_cached(current_input)
+                if fig:
+                    st.plotly_chart(fig, use_container_width=True)
 
 if __name__ == "__main__":
     app = ApplicationUI()

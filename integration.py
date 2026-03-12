@@ -58,7 +58,6 @@ class IntegrationEngine:
                 if decomposed != expr and not decomposed.has(sp.Integral):
                     return decomposed
         except Exception:
-            # Catch generator errors from SymPy for non-polynomial rational functions
             pass
         return None
 
@@ -81,9 +80,20 @@ class IntegrationEngine:
             result.given = rf"\int \left( {sp.latex(expr)} \right) \, dx"
             result.steps.append(rf"\text{{Identify the integrand: }} f(x) = {sp.latex(expr)}")
             
-            u_sub_data = self._detect_u_substitution(expr)
-            partial_frac_data = self._detect_partial_fractions(expr)
-            
+            # If user forces basic patterns, ignore advanced detections
+            if method_preference == "Basic Standard Patterns":
+                u_sub_data = None
+                partial_frac_data = None
+            else:
+                u_sub_data = self._detect_u_substitution(expr)
+                partial_frac_data = self._detect_partial_fractions(expr)
+
+            # --- STRICT ENFORCEMENT OF PREFERRED METHOD ---
+            if method_preference == "U-Substitution" and not u_sub_data:
+                raise ValueError("Forced Method Failed: U-Substitution pattern not detected for this integrand. Try setting method to 'Auto'.")
+            if method_preference == "Partial Fractions" and not partial_frac_data:
+                raise ValueError("Forced Method Failed: Partial Fractions decomposition is not applicable here. Try setting method to 'Auto'.")
+
             antiderivative = None
 
             if method_preference in ["Auto", "U-Substitution"] and u_sub_data:
@@ -115,7 +125,6 @@ class IntegrationEngine:
                 result.method = "Basic Standard Patterns"
                 antiderivative = sp.integrate(expr, self.x)
                 
-            # E-01 Fix: Halt if integration results in unresolvable integrals or special non-elementary functions
             if isinstance(antiderivative, sp.Integral) or antiderivative.has(sp.erf, sp.erfi, sp.Si, sp.Ci, sp.Ei, sp.gamma):
                 raise ValueError("Requires advanced techniques beyond Basic Patterns, or has no closed-form elementary solution.")
                 
