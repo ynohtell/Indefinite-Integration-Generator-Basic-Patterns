@@ -1,5 +1,5 @@
 # Symbolic: Indefinite Integration Generator (Basic Patterns) v1.0
-**Institution:** [Insert School Name]  
+**Institution:** Cavite State University - Imus Campus 
 **Course:** BSCS 4B | **School Year:** 2025-2026  
 **Group Name:** UNDISPUTEDS  
 **Members:** - Mayor, Mark Aaron A.
@@ -15,5 +15,7 @@ A powerful, interactive Streamlit application built with Python and SymPy to per
 3. Install dependencies using uv:
    ```bash
    uv pip install streamlit sympy numpy plotly
+   # OR
+   uv sync
 4. Run the application:
     uv run streamlit run app.py
