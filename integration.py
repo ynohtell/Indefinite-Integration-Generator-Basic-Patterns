@@ -3,12 +3,8 @@ import sympy as sp
 import numpy as np
 from datetime import datetime
 import plotly.graph_objects as go
-import streamlit as st
 import time
 
-# ==========================================
-# WEEK 5: CORE DATA STRUCTURES & STOPPING
-# ==========================================
 class ComputationResult:
     def __init__(self):
         self.given: str = ""
@@ -19,18 +15,14 @@ class ComputationResult:
         self.summary: Dict[str, Any] = {}
         self.is_success: bool = False
         self.error_message: str = ""
-        self.stopping_reason: str = "" # Week 5 Requirement
+        self.stopping_reason: str = ""
 
-# ==========================================
-# WEEK 6 & 8: ENGINE, FEATURES & EDGE CASES
-# ==========================================
 class IntegrationEngine:
     def __init__(self):
         self.x = sp.Symbol('x')
         self.u = sp.Symbol('u')
         
     def _detect_u_substitution(self, expr) -> Optional[Tuple[sp.Expr, sp.Expr, sp.Expr]]:
-        """Scans the expression tree for a valid basic U-Substitution pattern."""
         if not expr.is_Mul:
             return None
             
@@ -60,12 +52,14 @@ class IntegrationEngine:
         return None
 
     def _detect_partial_fractions(self, expr) -> Optional[sp.Expr]:
-        """Week 6: Detects if Partial Fractions decomposition is applicable."""
-        # Check if it's a rational function that can be decomposed
-        if expr.is_Mul or expr.is_Add or expr.is_Pow:
-            decomposed = sp.apart(expr, self.x)
-            if decomposed != expr and not decomposed.has(sp.Integral):
-                return decomposed
+        try:
+            if expr.is_Mul or expr.is_Add or expr.is_Pow:
+                decomposed = sp.apart(expr, self.x)
+                if decomposed != expr and not decomposed.has(sp.Integral):
+                    return decomposed
+        except Exception:
+            # Catch generator errors from SymPy for non-polynomial rational functions
+            pass
         return None
 
     def compute(self, integrand_str: str, method_preference: str = "Auto") -> ComputationResult:
@@ -73,7 +67,6 @@ class IntegrationEngine:
         start_time = time.perf_counter()
         
         try:
-            # Week 8: Edge Case - Syntax Checking
             if not integrand_str or integrand_str.isspace():
                 raise ValueError("Integrand cannot be empty.")
             
@@ -82,7 +75,6 @@ class IntegrationEngine:
             except sp.SympifyError:
                 raise ValueError("Invalid mathematical syntax. Please check your parentheses and operators.")
 
-            # Week 8: Edge Case - Division by Zero or invalid types
             if expr.has(sp.zoo, sp.oo, sp.nan):
                 raise ValueError("Expression evaluates to infinity or undefined values.")
 
@@ -92,7 +84,6 @@ class IntegrationEngine:
             u_sub_data = self._detect_u_substitution(expr)
             partial_frac_data = self._detect_partial_fractions(expr)
             
-            # --- Week 6: Method Selection Logic ---
             antiderivative = None
 
             if method_preference in ["Auto", "U-Substitution"] and u_sub_data:
@@ -124,16 +115,16 @@ class IntegrationEngine:
                 result.method = "Basic Standard Patterns"
                 antiderivative = sp.integrate(expr, self.x)
                 
-                # Week 5 & 8: Edge Case - Non-integrable functions
-                if isinstance(antiderivative, sp.Integral):
-                    raise ValueError("Requires advanced techniques beyond Basic Patterns, or has no closed-form solution.")
-                    
+            # E-01 Fix: Halt if integration results in unresolvable integrals or special non-elementary functions
+            if isinstance(antiderivative, sp.Integral) or antiderivative.has(sp.erf, sp.erfi, sp.Si, sp.Ci, sp.Ei, sp.gamma):
+                raise ValueError("Requires advanced techniques beyond Basic Patterns, or has no closed-form elementary solution.")
+                
+            if result.method == "Basic Standard Patterns":
                 result.steps.append(rf"\text{{Evaluate using basic rules: }} {sp.latex(antiderivative)}")
                 result.steps.append(rf"\text{{Add the constant of integration, }} C.")
             
             result.final_answer = rf"{sp.latex(antiderivative)} + C"
             
-            # Week 9: Verification Phase
             derivative = sp.diff(antiderivative, self.x)
             residual = sp.simplify(expr - derivative)
             
@@ -144,7 +135,6 @@ class IntegrationEngine:
             else:
                 result.verification = verification_text + "\n\n**Verification Warning:** Symbolic equivalence to 0 not trivially established."
                 
-            # Week 5: Stopping Output
             result.stopping_reason = "Exact closed-form antiderivative reached successfully."
                 
             result.summary = {
@@ -161,10 +151,6 @@ class IntegrationEngine:
             
         return result
 
-# ==========================================
-# GRAPHING ENGINE (CACHED)
-# ==========================================
-@st.cache_data(show_spinner=False)
 def generate_plot_cached(expr_str: str):
     x = sp.Symbol('x')
     try:

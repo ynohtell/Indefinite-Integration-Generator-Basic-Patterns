@@ -1,12 +1,6 @@
 import streamlit as st
-import sympy as sp
-import numpy as np
-from typing import Dict, Any, Optional, Tuple, List
 from integration import IntegrationEngine, ComputationResult, generate_plot_cached
 
-# ==========================================
-# WEEK 7, 11, 13: UI & FORMATTING 
-# ==========================================
 class ApplicationUI:
     def __init__(self):
         self.engine = IntegrationEngine()
@@ -30,34 +24,71 @@ class ApplicationUI:
         else:
             st.session_state.expr_input += val
 
-    # Week 10: Export Feature
-    def generate_text_report(self, res: ComputationResult) -> str:
-        report = f"========================================\n"
-        report += f" SYMBOLIC INTEGRATION REPORT v1.0\n"
-        report += f" Generated on: {res.summary.get('Timestamp', 'N/A')}\n"
-        report += f"========================================\n\n"
-        
-        report += f"[1] GIVEN PROBLEM\n-----------------\n"
-        report += f"Integrand: {res.given}\n"
-        report += f"Method Used: {res.method}\n\n"
-        
-        report += f"[2] STEP-BY-STEP SOLUTION\n-------------------------\n"
+    def generate_html_report(self, res: ComputationResult) -> str:
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Integration Report</title>
+            <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+            <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+            <style>
+                body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 40px; color: #333; line-height: 1.6; }}
+                .container {{ max-width: 800px; margin: auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
+                h1, h2, h3 {{ color: #2C3E50; }}
+                .step-card {{ background: #f8f9fa; padding: 15px; border-left: 4px solid #3498db; margin-bottom: 10px; border-radius: 4px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h2>∫ Symbolic Integration Report (v1.0)</h2>
+                <p><strong>Generated on:</strong> {res.summary.get('Timestamp', 'N/A')}</p>
+                <hr>
+                
+                <h3>[1] Problem Overview</h3>
+                <p><strong>Integrand:</strong> $$ {res.given} $$</p>
+                <p><strong>Method Used:</strong> {res.method}</p>
+                
+                <h3>[2] Step-by-Step Solution</h3>
+        """
         for i, step in enumerate(res.steps, 1):
-            clean_step = step.replace(r"\text{", "").replace("}", "").replace(r"\frac", "frac")
-            report += f"Step {i}: {clean_step}\n"
+            html += f'<div class="step-card"><strong>Step {i}:</strong> $$ {step} $$</div>'
             
-        report += f"\n[3] FINAL ANSWER\n----------------\n"
-        report += f"F(x) = {res.final_answer.replace(r'\\', '')}\n\n"
+        html += f"""
+                <h3>[3] Final Answer</h3>
+                <div style="font-size: 1.2em; padding: 20px; background: #e8f5e9; border-radius: 8px; border: 1px solid #c8e6c9;">
+                    $$ F(x) = {res.final_answer} $$
+                </div>
+                
+                <h3>[4] Verification & Auditing</h3>
+                <p><strong>Status:</strong> {res.stopping_reason}</p>
+                <p><strong>Check:</strong> $$ {res.verification} $$</p>
+                
+                <hr>
+                <p style="text-align:center; color: #7f8c8d; font-size: 0.9em;">
+                    Created by Group UNDISPUTEDS | BSCS 4B | 2025-2026
+                </p>
+            </div>
+        </body>
+        </html>
+        """
+        return html
+
+    @st.dialog("About the Developers")
+    def show_about_modal(self):
+        st.markdown("""
+        ### Group UNDISPUTEDS
+        **Course:** BSCS 4B  
+        **School Year:** 2025-2026
         
-        report += f"[4] VERIFICATION & STOPPING RULE\n--------------------------------\n"
-        report += f"Status: {res.stopping_reason}\n"
-        clean_ver = res.verification.replace(r"\text{", "").replace("}", "")
-        report += f"Check: {clean_ver}\n\n"
+        #### Members:
+        * 👨‍💻 **Mayor, Mark Aaron A.**
+        * 👨‍💻 **Malinis, Johnbert**
+        * 👨‍💻 **Pula, Henry Luis P.**
         
-        report += f"========================================\n"
-        report += f" End of Report | Undisputeds BSCS 4B\n"
-        report += f"========================================\n"
-        return report
+        **Project:** Symbolic Indefinite Integration Generator (v1.0)
+        """)
+        st.info("This project dynamically resolves integrals using SymPy, generating step-by-step logic and graphical area mapping.")
 
     def render_virtual_keyboard(self):
         keys = [
@@ -77,10 +108,8 @@ class ApplicationUI:
     def run(self):
         st.set_page_config(page_title="Symbolic Integrator v1.0", layout="wide", page_icon="∫")
         
-        # WEEK 7 & 13: Sidebar & Help/About Documentation
         with st.sidebar:
             st.header("⚙️ Configuration")
-            # Week 6: UI Method Selection
             st.session_state.selected_method = st.selectbox(
                 "Preferred Integration Method",
                 options=["Auto", "Basic Standard Patterns", "U-Substitution", "Partial Fractions"],
@@ -90,7 +119,7 @@ class ApplicationUI:
             st.divider()
             st.header("📜 History")
             if not st.session_state.history:
-                st.info("Your successful computations will appear here.")
+                st.info("Your computations will appear here.")
             else:
                 for idx, item in enumerate(reversed(st.session_state.history)):
                     if st.button(f"∫ {item['input']} dx", key=f"hist_{idx}", use_container_width=True):
@@ -102,17 +131,9 @@ class ApplicationUI:
                     st.rerun()
 
             st.divider()
-            st.markdown("""
-            **Symbolic: Indefinite Integration Generator (v1.0)**
-            *School Year 2025-2026*
-            
-            **Group UNDISPUTEDS (BSCS 4B)**
-            * Mayor, Mark Aaron A.
-            * Malinis, Johnbert
-            * Pula, Henry Luis P.
-            """)
+            if st.button("ℹ️ About UNDISPUTEDS", use_container_width=True):
+                self.show_about_modal()
 
-        # Main Layout
         st.title("∫ Indefinite Integration Solver")
         st.caption("Enter a mathematical expression to compute its indefinite integral.")
         
@@ -144,8 +165,14 @@ class ApplicationUI:
                             st.session_state.history = [i for i in st.session_state.history if i["input"] != current_input]
                             st.session_state.history.append({"input": current_input, "result": result})
 
-        # Output / Trail Area
         with col_right:
+            # INSTANT GRAPHING LOGIC: Always attempt to draw the graph based on the CURRENT text input first.
+            current_input = st.session_state.expr_input.strip()
+            if current_input:
+                fig = generate_plot_cached(current_input)
+                if fig:
+                    st.plotly_chart(fig, use_container_width=True)
+
             if st.session_state.last_result:
                 res = st.session_state.last_result
                 if res.is_success:
@@ -156,8 +183,6 @@ class ApplicationUI:
                     st.markdown("#### Problem Breakdown")
                     st.info(f"$$ {res.given} $$")
                     st.caption(f"**Method Used:** {res.method}")
-                    
-                    # Week 5: Stopping rule info
                     st.caption(f"**Completion Rule:** {res.stopping_reason}")
 
                     with st.expander("View Step-by-Step Breakdown", expanded=False):
@@ -165,7 +190,6 @@ class ApplicationUI:
                             st.markdown(f"**Step {i}:**")
                             st.latex(step)
                             
-                    # Week 9: Prominent Verification
                     with st.expander("View Verification (Derivative Check)", expanded=False):
                         parts = res.verification.split("\n\n")
                         if len(parts) >= 2:
@@ -179,20 +203,16 @@ class ApplicationUI:
                             
                     st.caption(f"⏱ {res.summary.get('Runtime', 'N/A')} | 🕒 {res.summary.get('Timestamp', 'N/A')}")
                     
-                    # Week 10: Export Feature Button
-                    report_txt = self.generate_text_report(res)
-                    st.download_button(label="📄 Export Report (TXT)", data=report_txt, file_name="integration_report.txt", mime="text/plain", use_container_width=True)
+                    # HTML Export Feature Button (Keeps formatting pristine)
+                    report_html = self.generate_html_report(res)
+                    filename = f"integration_report_{res.summary.get('Timestamp', 'report').replace(':', '').replace(' ', '_')}.html"
+                    st.download_button(label="📄 Export Report (HTML - Best Format)", data=report_html, file_name=filename, mime="text/html", use_container_width=True)
 
-                    # Graph rendering
-                    fig = generate_plot_cached(st.session_state.expr_input)
-                    if fig:
-                        st.plotly_chart(fig, use_container_width=True)
                 else:
-                    # Week 8 Edge case UI rendering
                     st.error(f"Computation Failed")
                     st.warning(res.error_message)
                     st.info(f"System Note: {res.stopping_reason}")
-            else:
+            elif not current_input:
                 st.info("👈 Enter an expression on the left and click **Compute Integral** to see the solution here.")
 
 if __name__ == "__main__":
