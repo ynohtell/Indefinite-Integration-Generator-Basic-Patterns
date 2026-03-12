@@ -100,7 +100,6 @@ class ApplicationUI:
     def render_virtual_keyboard(self):
         keys = [
             [("7", "7"), ("8", "8"), ("9", "9"), ("⌫", "BACKSPACE"), ("C", "CLEAR")],
-            # CHANGED: Used Unicode Asterisk Operator (∗) to bypass Markdown hiding the symbol, and changed ÷ to /
             [("4", "4"), ("5", "5"), ("6", "6"), ("∗", "*"), ("/", "/")], 
             [("1", "1"), ("2", "2"), ("3", "3"), ("＋", "+"), ("−", "-")],
             [("0", "0"), (".", "."), ("x", "x"), ("(", "("), (")", ")")],
@@ -208,7 +207,10 @@ class ApplicationUI:
                     
                     report_html = self.generate_html_report(res)
                     filename = f"integration_report_{res.summary.get('Timestamp', 'report').replace(':', '').replace(' ', '_')}.html"
-                    st.download_button(label="📄 Export Report (HTML - Best Format)", data=report_html, file_name=filename, mime="text/html", use_container_width=True)
+                    
+                    # ADDED: Success Message Toast when Export is clicked
+                    if st.download_button(label="📄 Export Report (HTML - Best Format)", data=report_html, file_name=filename, mime="text/html", use_container_width=True):
+                        st.toast("✅ Report exported successfully! Check your downloads folder.", icon="🎉")
 
                 else:
                     st.error(f"Computation Failed")

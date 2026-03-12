@@ -167,3 +167,45 @@ def test_w8_04_edge_case_division_by_zero(engine):
     
     assert result.is_success is False
     assert "evaluates to infinity or undefined values" in result.error_message
+
+
+# ==========================================
+# WEEK 9: VERIFICATION & AUDIT TESTS
+# ==========================================
+
+def test_w9_01_verification_success_polynomial(engine):
+    """Test ID W9-01: Verifies the derivative back-check works for polynomials."""
+    print("\n--- TEST W9-01: Verification Check (Polynomial) ---")
+    result = engine.compute("3*x**2")
+    
+    assert result.is_success is True
+    assert "Verification Successful" in result.verification
+    assert "3 x^{2}" in result.verification # Checks if the derivative matches
+
+def test_w9_02_verification_success_usub(engine):
+    """Test ID W9-04: Verifies the derivative back-check works for U-Substitution."""
+    print("\n--- TEST W9-04: Verification Check (U-Sub) ---")
+    result = engine.compute("2*x*cos(x**2)")
+    
+    assert result.is_success is True
+    assert "Verification Successful" in result.verification
+    assert "2 x \\cos{\\left(x^{2} \\right)}" in result.verification
+
+# ==========================================
+# WEEK 10: EXPORT CAPABILITY TESTS
+# ==========================================
+
+def test_w10_01_export_data_contains_all_fields(engine):
+    """Test ID W10-01/02: Ensures the result object holds all data needed for the HTML export."""
+    print("\n--- TEST W10-01: Export Data Completeness ---")
+    result = engine.compute("3*x**2")
+    
+    # To generate the report, the UI relies on these properties existing and being populated
+    assert result.given != ""
+    assert result.method != ""
+    assert len(result.steps) > 0
+    assert result.final_answer != ""
+    assert result.verification != ""
+    assert "Timestamp" in result.summary
+    assert "Runtime" in result.summary
+    print("All required export fields are populated and ready for HTML generation.")
