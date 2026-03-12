@@ -15,6 +15,8 @@ class ApplicationUI:
             st.session_state.last_result = None
         if "selected_method" not in st.session_state:
             st.session_state.selected_method = "Auto"
+        if "last_raw_input" not in st.session_state:
+            st.session_state.last_raw_input = ""
 
     def _handle_keypress(self, label: str, val: str):
         if label == "C":
@@ -25,7 +27,6 @@ class ApplicationUI:
             st.session_state.expr_input += val
 
     def generate_html_report(self, res: ComputationResult) -> str:
-        # Prevent MathJax from overlapping text by splitting the LaTeX from the Markdown
         parts = res.verification.split("\n\n")
         math_check = parts[0]
         status_check = parts[1].replace("**", "") if len(parts) > 1 else ""
@@ -99,7 +100,8 @@ class ApplicationUI:
     def render_virtual_keyboard(self):
         keys = [
             [("7", "7"), ("8", "8"), ("9", "9"), ("⌫", "BACKSPACE"), ("C", "CLEAR")],
-            [("4", "4"), ("5", "5"), ("6", "6"), ("×", "*"), ("÷", "/")],
+            # CHANGED: Used Unicode Asterisk Operator (∗) to bypass Markdown hiding the symbol, and changed ÷ to /
+            [("4", "4"), ("5", "5"), ("6", "6"), ("∗", "*"), ("/", "/")], 
             [("1", "1"), ("2", "2"), ("3", "3"), ("＋", "+"), ("−", "-")],
             [("0", "0"), (".", "."), ("x", "x"), ("(", "("), (")", ")")],
             [("x²", "**2"), ("xⁿ", "**"), ("√", "sqrt("), ("sin", "sin("), ("cos", "cos(")]
@@ -131,6 +133,7 @@ class ApplicationUI:
                     if st.button(f"∫ {item['input']} dx", key=f"hist_{idx}", use_container_width=True):
                         st.session_state.expr_input = item['input']
                         st.session_state.last_result = item['result']
+                        st.session_state.last_raw_input = item['input']
                         st.rerun()
                 if st.button("🗑️ Clear History", use_container_width=True):
                     st.session_state.history = []
@@ -148,7 +151,7 @@ class ApplicationUI:
         with col_left:
             raw = st.session_state.expr_input
             if raw:
-                pretty = raw.replace("**", "^").replace("*", "·").replace("/", "÷")
+                pretty = raw.replace("**", "^").replace("/", "÷")
                 st.markdown(f"**Live Preview:** <span style='color:#4CAF50; font-family:monospace; font-size:1.2rem;'>{pretty}</span>", unsafe_allow_html=True)
             else:
                 st.markdown("**Live Preview:** *Type an expression...*")
@@ -164,6 +167,7 @@ class ApplicationUI:
                 else:
                     with st.spinner("Integrating..."):
                         current_input = st.session_state.expr_input.strip()
+                        st.session_state.last_raw_input = current_input
                         result = self.engine.compute(current_input, st.session_state.selected_method)
                         st.session_state.last_result = result
                         
@@ -213,9 +217,13 @@ class ApplicationUI:
             elif not st.session_state.expr_input.strip():
                 st.info("👈 Enter an expression on the left and click **Compute Integral** to see the solution here.")
 
-            # INSTANT GRAPHING LOGIC: Moved to the BOTTOM of the right column
             current_input = st.session_state.expr_input.strip()
-            if current_input:
+            
+            is_failed_state = (st.session_state.last_result 
+                               and not st.session_state.last_result.is_success 
+                               and st.session_state.last_raw_input == current_input)
+
+            if current_input and not is_failed_state:
                 st.divider()
                 fig = generate_plot_cached(current_input)
                 if fig:
