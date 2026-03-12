@@ -1,66 +1,12 @@
 import streamlit as st
 import sympy as sp
 import numpy as np
-import plotly.graph_objects as go
-from integration import IntegrationEngine, ComputationResult
+from typing import Dict, Any, Optional, Tuple, List
+from integration import IntegrationEngine, ComputationResult, generate_plot_cached
 
-# --- CACHED GRAPHING FUNCTION ---
-@st.cache_data(show_spinner=False)
-def generate_plot_cached(expr_str: str):
-    x = sp.Symbol('x')
-    try:
-        expr = sp.sympify(expr_str)
-        antideriv = sp.integrate(expr, x)
-
-        f_lambdified = sp.lambdify(x, expr, modules=['numpy'])
-        F_lambdified = sp.lambdify(x, antideriv, modules=['numpy'])
-
-        x_vals = np.linspace(-10, 10, 500)
-        
-        y_f = f_lambdified(x_vals)
-        y_F = F_lambdified(x_vals)
-
-        # Mask out massive values for asymptotes
-        threshold = 50
-        y_f = np.where(np.abs(y_f) > threshold, np.nan, y_f)
-        y_F = np.where(np.abs(y_F) > threshold, np.nan, y_F)
-
-        # Build the interactive Plotly figure
-        fig = go.Figure()
-        
-        # Integrand (f(x)) with shaded area to visualize "Integration"
-        fig.add_trace(go.Scatter(
-            x=x_vals, y=y_f, 
-            mode='lines', 
-            name='f(x) [Integrand]', 
-            line=dict(color='#FF4B4B', width=2),
-            fill='tozeroy', 
-            fillcolor='rgba(255, 75, 75, 0.15)'
-        ))
-        
-        # Antiderivative (F(x))
-        fig.add_trace(go.Scatter(
-            x=x_vals, y=y_F, 
-            mode='lines', 
-            name='F(x) [Antiderivative]', 
-            line=dict(color='#0068C9', width=3, dash='dash')
-        ))
-        
-        fig.update_layout(
-            title="Function vs. Area (Antiderivative)",
-            xaxis_title="x",
-            yaxis_title="y",
-            hovermode="x unified",
-            margin=dict(l=20, r=20, t=50, b=20),
-            height=400,
-            xaxis=dict(zeroline=True, zerolinewidth=1.5, zerolinecolor='gray'),
-            yaxis=dict(zeroline=True, zerolinewidth=1.5, zerolinecolor='gray'),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-        )
-        return fig
-    except Exception:
-        return None
-
+# ==========================================
+# WEEK 7, 11, 13: UI & FORMATTING 
+# ==========================================
 class ApplicationUI:
     def __init__(self):
         self.engine = IntegrationEngine()
@@ -73,6 +19,8 @@ class ApplicationUI:
             st.session_state.expr_input = ""
         if "last_result" not in st.session_state:
             st.session_state.last_result = None
+        if "selected_method" not in st.session_state:
+            st.session_state.selected_method = "Auto"
 
     def _handle_keypress(self, label: str, val: str):
         if label == "C":
@@ -82,16 +30,34 @@ class ApplicationUI:
         else:
             st.session_state.expr_input += val
 
-    def render_live_preview(self):
-        raw = st.session_state.expr_input
-        if raw:
-            pretty = raw.replace("**", "^").replace("*", "·").replace("/", "÷")
-            st.markdown(
-                f"**Live Preview:** &nbsp; <span style='color: #4CAF50; font-family: monospace; font-size: 1.2rem;'>{pretty}</span>", 
-                unsafe_allow_html=True
-            )
-        else:
-            st.markdown("**Live Preview:** &nbsp; *Type an expression...*")
+    # Week 10: Export Feature
+    def generate_text_report(self, res: ComputationResult) -> str:
+        report = f"========================================\n"
+        report += f" SYMBOLIC INTEGRATION REPORT v1.0\n"
+        report += f" Generated on: {res.summary.get('Timestamp', 'N/A')}\n"
+        report += f"========================================\n\n"
+        
+        report += f"[1] GIVEN PROBLEM\n-----------------\n"
+        report += f"Integrand: {res.given}\n"
+        report += f"Method Used: {res.method}\n\n"
+        
+        report += f"[2] STEP-BY-STEP SOLUTION\n-------------------------\n"
+        for i, step in enumerate(res.steps, 1):
+            clean_step = step.replace(r"\text{", "").replace("}", "").replace(r"\frac", "frac")
+            report += f"Step {i}: {clean_step}\n"
+            
+        report += f"\n[3] FINAL ANSWER\n----------------\n"
+        report += f"F(x) = {res.final_answer.replace(r'\\', '')}\n\n"
+        
+        report += f"[4] VERIFICATION & STOPPING RULE\n--------------------------------\n"
+        report += f"Status: {res.stopping_reason}\n"
+        clean_ver = res.verification.replace(r"\text{", "").replace("}", "")
+        report += f"Check: {clean_ver}\n\n"
+        
+        report += f"========================================\n"
+        report += f" End of Report | Undisputeds BSCS 4B\n"
+        report += f"========================================\n"
+        return report
 
     def render_virtual_keyboard(self):
         keys = [
@@ -101,73 +67,27 @@ class ApplicationUI:
             [("0", "0"), (".", "."), ("x", "x"), ("(", "("), (")", ")")],
             [("x²", "**2"), ("xⁿ", "**"), ("√", "sqrt("), ("sin", "sin("), ("cos", "cos(")]
         ]
-        
-        # Keep only the minimal CSS needed for the keyboard buttons
-        st.markdown("""
-        <style>
-            div[data-testid='stButton'] button {
-                height: 2.5rem;
-                min-height: 2.5rem;
-            }
-        </style>
-        """, unsafe_allow_html=True)
-        
+        st.markdown("""<style>div[data-testid='stButton'] button {height: 2.5rem; min-height: 2.5rem;}</style>""", unsafe_allow_html=True)
         for r_idx, row in enumerate(keys):
             cols = st.columns(5)
             for c_idx, (label, val) in enumerate(row):
                 with cols[c_idx]:
-                    st.button(
-                        label, 
-                        on_click=self._handle_keypress, 
-                        args=(label, val), 
-                        use_container_width=True, 
-                        key=f"btn_{r_idx}_{c_idx}"
-                    )
-
-    def render_trail(self, res: ComputationResult):
-        st.markdown("### ✨ Final Answer")
-        st.success(f"$$ \\int f(x)dx = {res.final_answer} $$")
-        
-        st.divider()
-        
-        st.markdown("#### Problem Breakdown")
-        st.info(f"$$ {res.given} $$")
-        st.caption(f"**Method Used:** {res.method}")
-
-        tutorials = {
-            "Integration by Substitution": "https://www.youtube.com/results?search_query=integration+by+u+substitution",
-            "Basic Standard Patterns": "https://www.youtube.com/results?search_query=basic+integration+rules"
-        }
-        if res.method in tutorials:
-            st.markdown(f"📺 **Need help?** [Watch a tutorial on {res.method}]({tutorials[res.method]})")
-        
-        with st.expander("View Step-by-Step Breakdown", expanded=False):
-            for i, step in enumerate(res.steps, 1):
-                st.markdown(f"**Step {i}:**")
-                st.latex(step)
-                
-        with st.expander("View Verification (Derivative Check)", expanded=False):
-            parts = res.verification.split("\n\n")
-            if len(parts) >= 2:
-                st.latex(parts[0])
-                if "Successful" in parts[1]:
-                    st.success(parts[1])
-                else:
-                    st.warning(parts[1])
-            else:
-                st.warning(res.verification)
-                
-        runtime = res.summary.get("Runtime", "N/A")
-        iterations = res.summary.get("Iterations", "N/A")
-        time_computed = res.summary.get("Timestamp", " N/A").split(" ")[1]
-        
-        st.caption(f"⏱ {runtime} | 🔄 {iterations} iter | 🕒 {time_computed}")
+                    st.button(label, on_click=self._handle_keypress, args=(label, val), use_container_width=True, key=f"btn_{r_idx}_{c_idx}")
 
     def run(self):
-        st.set_page_config(page_title="Symbolic Integrator", layout="wide", page_icon="∫")
+        st.set_page_config(page_title="Symbolic Integrator v1.0", layout="wide", page_icon="∫")
         
-        # Sidebar History
+        # WEEK 7 & 13: Sidebar & Help/About Documentation
         with st.sidebar:
+            st.header("⚙️ Configuration")
+            # Week 6: UI Method Selection
+            st.session_state.selected_method = st.selectbox(
+                "Preferred Integration Method",
+                options=["Auto", "Basic Standard Patterns", "U-Substitution", "Partial Fractions"],
+                help="Select 'Auto' to let the engine decide, or force a specific method."
+            )
+            
+            st.divider()
             st.header("📜 History")
             if not st.session_state.history:
                 st.info("Your successful computations will appear here.")
@@ -177,25 +97,36 @@ class ApplicationUI:
                         st.session_state.expr_input = item['input']
                         st.session_state.last_result = item['result']
                         st.rerun()
-                
-                st.divider()
                 if st.button("🗑️ Clear History", use_container_width=True):
                     st.session_state.history = []
                     st.rerun()
 
-            st.markdown("<br><br><div style='text-align: center; color: gray; font-size: 0.8rem;'>"
-                        "MADE BY UNDISPUTEDS<br>Aaron Mayor | Henry Pula | Johnbert Malinis</div>", 
-                        unsafe_allow_html=True)
+            st.divider()
+            st.markdown("""
+            **Symbolic: Indefinite Integration Generator (v1.0)**
+            *School Year 2025-2026*
+            
+            **Group UNDISPUTEDS (BSCS 4B)**
+            * Mayor, Mark Aaron A.
+            * Malinis, Johnbert
+            * Pula, Henry Luis P.
+            """)
 
         # Main Layout
-        st.title("∫ Indefinite Integration")
+        st.title("∫ Indefinite Integration Solver")
         st.caption("Enter a mathematical expression to compute its indefinite integral.")
         
         col_left, col_right = st.columns([1, 1], gap="large")
         
         with col_left:
-            self.render_live_preview()
-            st.text_input("Integrand f(x)", key="expr_input", placeholder="e.g., 3*x**2 or sin(x)", label_visibility="collapsed")
+            raw = st.session_state.expr_input
+            if raw:
+                pretty = raw.replace("**", "^").replace("*", "·").replace("/", "÷")
+                st.markdown(f"**Live Preview:** <span style='color:#4CAF50; font-family:monospace; font-size:1.2rem;'>{pretty}</span>", unsafe_allow_html=True)
+            else:
+                st.markdown("**Live Preview:** *Type an expression...*")
+                
+            st.text_input("Integrand f(x)", key="expr_input", placeholder="e.g., 3*x**2 or 1/(x**2 - 1)", label_visibility="collapsed")
             
             with st.expander("🖩 Quick Hand Calculator", expanded=True):
                 self.render_virtual_keyboard()
@@ -206,30 +137,61 @@ class ApplicationUI:
                 else:
                     with st.spinner("Integrating..."):
                         current_input = st.session_state.expr_input.strip()
-                        result = self.engine.compute(current_input)
+                        result = self.engine.compute(current_input, st.session_state.selected_method)
                         st.session_state.last_result = result
                         
                         if result.is_success:
-                            st.session_state.history = [
-                                item for item in st.session_state.history 
-                                if item["input"] != current_input
-                            ]
-                            st.session_state.history.append({
-                                "input": current_input,
-                                "result": result
-                            })
+                            st.session_state.history = [i for i in st.session_state.history if i["input"] != current_input]
+                            st.session_state.history.append({"input": current_input, "result": result})
 
+        # Output / Trail Area
         with col_right:
             if st.session_state.last_result:
-                if st.session_state.last_result.is_success:
-                    self.render_trail(st.session_state.last_result)
+                res = st.session_state.last_result
+                if res.is_success:
+                    st.markdown("### ✨ Final Answer")
+                    st.success(f"$$ \\int f(x)dx = {res.final_answer} $$")
                     
-                    input_to_plot = st.session_state.history[-1]["input"] if st.session_state.history else st.session_state.expr_input
-                    fig = generate_plot_cached(input_to_plot)
+                    st.divider()
+                    st.markdown("#### Problem Breakdown")
+                    st.info(f"$$ {res.given} $$")
+                    st.caption(f"**Method Used:** {res.method}")
+                    
+                    # Week 5: Stopping rule info
+                    st.caption(f"**Completion Rule:** {res.stopping_reason}")
+
+                    with st.expander("View Step-by-Step Breakdown", expanded=False):
+                        for i, step in enumerate(res.steps, 1):
+                            st.markdown(f"**Step {i}:**")
+                            st.latex(step)
+                            
+                    # Week 9: Prominent Verification
+                    with st.expander("View Verification (Derivative Check)", expanded=False):
+                        parts = res.verification.split("\n\n")
+                        if len(parts) >= 2:
+                            st.latex(parts[0])
+                            if "Successful" in parts[1]:
+                                st.success(parts[1])
+                            else:
+                                st.warning(parts[1])
+                        else:
+                            st.warning(res.verification)
+                            
+                    st.caption(f"⏱ {res.summary.get('Runtime', 'N/A')} | 🕒 {res.summary.get('Timestamp', 'N/A')}")
+                    
+                    # Week 10: Export Feature Button
+                    report_txt = self.generate_text_report(res)
+                    st.download_button(label="📄 Export Report (TXT)", data=report_txt, file_name="integration_report.txt", mime="text/plain", use_container_width=True)
+
+                    # Graph rendering
+                    fig = generate_plot_cached(st.session_state.expr_input)
                     if fig:
                         st.plotly_chart(fig, use_container_width=True)
                 else:
-                    st.error(f"Computation Failed: {st.session_state.last_result.error_message}")
+                    # Week 8 Edge case UI rendering
+                    st.error(f"Computation Failed")
+                    st.warning(res.error_message)
+                    st.info(f"System Note: {res.stopping_reason}")
             else:
                 st.info("👈 Enter an expression on the left and click **Compute Integral** to see the solution here.")
 
